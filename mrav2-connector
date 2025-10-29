@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# MRAv2 Syslog Connector - Standalone Wrapper Script
+# This script runs the connector using the local virtual environment
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_DIR="${SCRIPT_DIR}/venv"
+PYTHON_MAIN="${SCRIPT_DIR}/lookout_mra_client/main.py"
+
+# Check if virtual environment exists
+if [ ! -d "$VENV_DIR" ]; then
+    echo "ERROR: Virtual environment not found at $VENV_DIR"
+    echo "Please run ./install.sh first"
+    exit 1
+fi
+
+# Check if main.py exists
+if [ ! -f "$PYTHON_MAIN" ]; then
+    echo "ERROR: Main script not found at $PYTHON_MAIN"
+    exit 1
+fi
+
+# Activate virtual environment and run
+export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH}"
+exec "${VENV_DIR}/bin/python3" "$PYTHON_MAIN" "$@"

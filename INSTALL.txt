@@ -1,0 +1,79 @@
+================================================================================
+MRAv2 Syslog Connector - Quick Start Installation Guide
+================================================================================
+
+REQUIREMENTS:
+-------------
+- Python 3.7 or higher
+- pip3
+- Network access to Lookout API and syslog server
+- Lookout API key (OAuth2 credentials)
+
+INSTALLATION STEPS:
+-------------------
+
+1. Extract the package:
+   
+   tar -xzf mrav2-syslog-connector-2.6.7.tar.gz
+   cd mrav2-syslog-connector-2.6.7
+
+2. Run the installer:
+   
+   ./install.sh
+   
+   This will:
+   - Create a Python virtual environment
+   - Install all required dependencies
+   - Create configuration template
+   - Set up log directory
+
+3. Configure the connector:
+   
+   vi config.ini
+   
+   Required settings:
+   - entity_name: Your Lookout tenant name
+   - api_domain: Lookout API URL (e.g., https://api.lookout.com)
+   - api_key: Your OAuth2 API key
+   - syslog host and port
+
+4. Start the connector:
+   
+   ./start-connector.sh
+
+5. Verify it's running:
+   
+   ./status-connector.sh
+
+CONTROL COMMANDS:
+-----------------
+
+Start:    ./start-connector.sh
+Stop:     ./stop-connector.sh
+Restart:  ./restart-connector.sh
+Status:   ./status-connector.sh
+
+LOGS:
+-----
+
+All logs are in: logs/mrav2-connector.log
+
+View real-time logs:
+  tail -f logs/mrav2-connector.log
+
+TROUBLESHOOTING:
+----------------
+
+If installation fails:
+- Check Python version: python3 --version (must be 3.7+)
+- Check pip3 is installed: pip3 --version
+- Check network connectivity
+
+If connector won't start:
+- Check config.ini has correct credentials
+- Check logs/mrav2-connector-stdout.log for errors
+- Verify syslog server is reachable
+
+For more details, see README.md
+
+================================================================================

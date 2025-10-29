@@ -1,0 +1,51 @@
+# MRAv2 Syslog Connector Configuration
+# Copy this file to config.ini and update with your values
+
+[lookout]
+# Your Lookout entity/tenant name
+entity_name = my-company
+
+# Lookout API domain (e.g., https://api.lookout.com)
+api_domain = https://api.lookout.com
+
+# Lookout API key (OAuth client credentials)
+api_key = YOUR_API_KEY_HERE
+
+# Event types to stream (set to true/false)
+threat_enabled = true
+device_enabled = true
+audit_enabled = false
+
+# Stream position to start from (leave as 0 to start from beginning)
+# This will be automatically updated as events are processed
+stream_position = 0
+
+# Alternative: Start from a specific time (ISO format)
+# If stream_position is set, this is ignored
+# start_time = 2024-01-01T00:00:00
+
+[syslog]
+# Syslog server hostname or IP
+host = localhost
+
+# Syslog server port (default: 514 for UDP, 601 for TCP)
+port = 514
+
+# Forwarder type: qradar or splunk
+forwarder_type = qradar
+
+# Optional: Custom log identifier key and value
+# These are added to the syslog message for filtering/routing
+log_identifier_key = 
+log_identifier = 
+
+[proxy]
+# Optional: HTTP/HTTPS proxy configuration
+# Leave empty if no proxy is needed
+
+# Proxy address (e.g., http://proxy.company.com:8080)
+address = 
+
+# Proxy authentication (if required)
+username = 
+password = 
