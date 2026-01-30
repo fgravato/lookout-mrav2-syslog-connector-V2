@@ -18,7 +18,7 @@ CONFIG_DIR="/etc/mrav2-connector"
 LOG_DIR="/var/log/mrav2-connector"
 SERVICE_USER="mrav2"
 SERVICE_GROUP="mrav2"
-VERSION="2.6.8"
+VERSION="2.6.9"
 
 echo "=========================================="
 echo "MRAv2 Syslog Connector - Linux Installer"

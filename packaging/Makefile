@@ -1,6 +1,6 @@
 .PHONY: all install uninstall clean deb rpm
 
-VERSION := 2.6.8
+VERSION := 2.6.9
 PACKAGE_NAME := mrav2-syslog-connector
 
 all: help
@@ -96,7 +96,7 @@ rpm:
 	# Create spec file
 	@cat > build/rpm/SPECS/$(PACKAGE_NAME).spec << 'SPEC'
 Name:           mrav2-syslog-connector
-Version:        2.6.8
+Version:        2.6.9
 Release:        1%{?dist}
 Summary:        Lookout MRAv2 Syslog Connector
 License:        MIT
@@ -136,7 +136,7 @@ systemctl enable %{name}
 /var/log/%{name}/
 
 %changelog
-* Fri Jan 30 2026 - Version 2.6.8
+* Fri Jan 30 2026 - Version 2.6.9
 - Initial RPM release
 SPEC
 	@echo "RPM spec file created. To build: rpmbuild -ba build/rpm/SPECS/$(PACKAGE_NAME).spec"
