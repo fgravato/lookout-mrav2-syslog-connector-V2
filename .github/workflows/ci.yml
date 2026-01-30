@@ -132,7 +132,7 @@ jobs:
 
     - name: Run tests in Docker
       run: |
-        docker-compose -f docker-compose.yml run --rm test
+        docker compose -f docker-compose.yml run --rm test
 
   # Security scan with bandit
   security:
