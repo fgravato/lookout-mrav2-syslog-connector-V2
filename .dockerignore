@@ -49,10 +49,10 @@ Thumbs.db
 logs/
 *.log
 
-# Testing
-tests/
+# Testing - Keep tests for Docker test image
 .pytest_cache/
 coverage/
+!tests/
 
 # Documentation
 docs/
