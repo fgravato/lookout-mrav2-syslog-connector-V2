@@ -35,8 +35,8 @@ The connector is distributed as a standalone tar.gz package with all dependencie
 **1. Extract the package:**
 
 ```bash
-tar -xzf mrav2-syslog-connector-2.6.7.tar.gz
-cd mrav2-syslog-connector-2.6.7
+tar -xzf mrav2-syslog-connector-2.6.9.tar.gz
+cd mrav2-syslog-connector-2.6.9
 ```
 
 **2. Run the installer:**
@@ -521,8 +521,8 @@ To create a new release:
 
 1. Tag the release:
    ```bash
-   git tag -a v2.6.8 -m "Release version 2.6.8"
-   git push origin v2.6.8
+   git tag -a v2.6.9 -m "Release version 2.6.9"
+   git push origin v2.6.9
    ```
 
 2. GitHub Actions will automatically:
@@ -531,7 +531,7 @@ To create a new release:
 
 3. Pull the released image:
    ```bash
-   docker pull ghcr.io/yourusername/lookout-mrav2-syslog-connector:v2.6.8
+   docker pull ghcr.io/yourusername/lookout-mrav2-syslog-connector:v2.6.9
    ```
 
 ### Local CI Testing
@@ -580,6 +580,8 @@ For issues or questions:
 
 ## Version History
 
+- **2.6.9** - Merged SMISHING_ALERT feature from upstream, all critical bug fixes intact
+- **2.6.8** - Added comprehensive test suite, Docker support, CI/CD pipeline, Linux packaging
 - **2.6.7** - Renamed to MRAv2 Syslog Connector, removed demo scripts, added packaging
 - Previous versions - Lookout MRA Client library
 
