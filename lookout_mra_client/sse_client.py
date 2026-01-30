@@ -1,4 +1,6 @@
-import logging, requests
+import logging
+
+import requests
 from typing import Generator
 
 from requests_oauthlib import OAuth2Session

@@ -1,4 +1,6 @@
-import logging, socket, threading
+import logging
+import socket
+import threading
 from logging.handlers import SysLogHandler
 
 from .lookout_logger import LOGGER_NAME

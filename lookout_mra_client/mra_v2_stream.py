@@ -1,4 +1,6 @@
-import logging, backoff
+import logging
+
+import backoff
 from datetime import datetime
 from typing import Generator, Tuple
 from oauthlib.oauth2 import TokenExpiredError
