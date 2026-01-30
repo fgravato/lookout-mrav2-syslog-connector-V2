@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Main connector service
+  connector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mrav2-connector
+    volumes:
+      # Mount your config file
+      - ./config.ini:/app/config.ini:ro
+      # Mount logs directory
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    # No ports exposed - makes outbound connections only
+    networks:
+      - connector-net
+
+  # Test runner service
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: mrav2-tests
+    volumes:
+      # Mount for coverage reports
+      - ./coverage:/app/coverage
+    command: pytest -v --tb=short --cov=lookout_mra_client --cov-report=xml --cov-report=term-missing
+    networks:
+      - connector-net
+
+  # Local syslog server for testing (optional)
+  syslog-server:
+    image: balabit/syslog-ng:latest
+    container_name: mrav2-syslog
+    ports:
+      - "514:514/udp"
+      - "514:514/tcp"
+      - "601:601/tcp"
+    volumes:
+      - ./syslog-ng.conf:/etc/syslog-ng/syslog-ng.conf:ro
+      - ./logs/syslog:/var/log
+    networks:
+      - connector-net
+
+networks:
+  connector-net:
+    driver: bridge

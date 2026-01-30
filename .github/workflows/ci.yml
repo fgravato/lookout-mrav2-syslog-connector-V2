@@ -1,0 +1,164 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+jobs:
+  # Run tests
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Run tests with pytest
+      run: |
+        pytest -v --tb=short --cov=lookout_mra_client --cov-report=xml --cov-report=term-missing
+
+    - name: Upload coverage to Codecov
+      if: matrix.python-version == '3.9'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+  # Type checking with mypy
+  type-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install mypy types-requests types-oauthlib
+
+    - name: Run type checker
+      run: |
+        mypy lookout_mra_client/ --ignore-missing-imports --show-error-codes
+
+  # Linting with flake8
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+
+    - name: Install flake8
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8
+
+    - name: Run linter
+      run: |
+        # Stop on syntax errors or undefined names
+        flake8 lookout_mra_client/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings
+        flake8 lookout_mra_client/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+  # Docker build test
+  docker-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: false
+        tags: mrav2-syslog-connector:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Test Docker image
+      run: |
+        docker run --rm mrav2-syslog-connector:test --help || true
+
+  # Run tests in Docker
+  docker-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run tests in Docker
+      run: |
+        docker-compose -f docker-compose.yml run --rm test
+
+  # Security scan with bandit
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+
+    - name: Install bandit
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit
+
+    - name: Run security scan
+      run: |
+        bandit -r lookout_mra_client/ -f json -o bandit-report.json || true
+        bandit -r lookout_mra_client/ -ll
+
+    - name: Upload security report
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: bandit-security-report
+        path: bandit-report.json
