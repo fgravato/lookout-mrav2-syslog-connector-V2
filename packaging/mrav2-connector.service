@@ -1,0 +1,29 @@
+[Unit]
+Description=Lookout MRAv2 Syslog Connector
+Documentation=https://github.com/fgravato/lookout-mrav2-syslog-connector-V2
+After=network.target
+
+[Service]
+Type=simple
+User=mrav2
+Group=mrav2
+WorkingDirectory=/opt/mrav2-connector
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/mrav2-connector/environment
+ExecStart=/opt/mrav2-connector/venv/bin/mrav2-syslog-connector --config /etc/mrav2-connector/config.ini --log-file /var/log/mrav2-connector/connector.log
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mrav2-connector
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/mrav2-connector /opt/mrav2-connector
+
+[Install]
+WantedBy=multi-user.target
