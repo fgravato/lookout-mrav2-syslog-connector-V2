@@ -380,16 +380,192 @@ lookout_mra_client/
 
 ### Running Tests
 
-```bash
-# Install development dependencies
-pip install -e ".[dev]"
+The project includes a comprehensive test suite using pytest.
 
-# Run tests
+**1. Install development dependencies:**
+
+```bash
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+```
+
+**2. Run tests:**
+
+```bash
+# Run all tests
 pytest
 
 # Run with coverage
 pytest --cov=lookout_mra_client
+
+# Run specific test file
+pytest tests/test_main.py
+
+# Run with verbose output
+pytest -v
 ```
+
+**3. Code quality checks:**
+
+```bash
+# Run type checker
+mypy lookout_mra_client/
+
+# Run linter
+flake8 lookout_mra_client/
+
+# Format code
+black lookout_mra_client/ tests/
+```
+
+### Test Coverage
+
+Current test coverage includes:
+- ✅ Configuration loading and parsing
+- ✅ Event type parsing
+- ✅ Proxy configuration
+- ✅ Event forwarder (QRadar and Splunk)
+- ✅ LEEF translator (MRA v1 and v2 formats)
+- ✅ Logger initialization
+- ✅ Stream thread behavior
+- ✅ Error handling for missing fields
+
+## Docker
+
+### Building the Docker Image
+
+```bash
+# Build the production image
+docker build -t mrav2-syslog-connector:latest .
+
+# Build the test image
+docker build -f Dockerfile.test -t mrav2-syslog-connector:test .
+```
+
+### Running with Docker
+
+**1. Create your config.ini file:**
+
+```bash
+cp config.ini.example config.ini
+# Edit with your credentials
+```
+
+**2. Run the connector:**
+
+```bash
+docker run -d \
+  --name mrav2-connector \
+  -v $(pwd)/config.ini:/app/config.ini:ro \
+  -v $(pwd)/logs:/app/logs \
+  mrav2-syslog-connector:latest
+```
+
+**3. View logs:**
+
+```bash
+docker logs -f mrav2-connector
+```
+
+### Using Docker Compose
+
+**1. Start the connector:**
+
+```bash
+# Start with local syslog server for testing
+docker-compose up -d
+
+# Or start just the connector
+docker-compose up -d connector
+```
+
+**2. Run tests in Docker:**
+
+```bash
+# Run all tests
+docker-compose run --rm test
+
+# Run specific test
+docker-compose run --rm test pytest tests/test_main.py -v
+```
+
+**3. View logs:**
+
+```bash
+docker-compose logs -f connector
+```
+
+**4. Stop services:**
+
+```bash
+docker-compose down
+```
+
+## CI/CD
+
+This project uses GitHub Actions for continuous integration and deployment.
+
+### Automated Checks
+
+Every push and pull request triggers:
+
+1. **Tests** - Runs pytest across Python 3.7-3.11
+2. **Type Checking** - Runs mypy for type safety
+3. **Linting** - Runs flake8 for code style
+4. **Docker Build** - Validates Docker image builds
+5. **Security Scan** - Runs bandit for security issues
+
+### Releasing
+
+To create a new release:
+
+1. Tag the release:
+   ```bash
+   git tag -a v2.6.8 -m "Release version 2.6.8"
+   git push origin v2.6.8
+   ```
+
+2. GitHub Actions will automatically:
+   - Build and push Docker image to GitHub Container Registry
+   - Create a GitHub Release
+
+3. Pull the released image:
+   ```bash
+   docker pull ghcr.io/yourusername/lookout-mrav2-syslog-connector:v2.6.8
+   ```
+
+### Local CI Testing
+
+You can run the same checks locally that run in CI:
+
+```bash
+# Run all tests
+pytest
+
+# Run type checker
+mypy lookout_mra_client/ --ignore-missing-imports
+
+# Run linter
+flake8 lookout_mra_client/
+
+# Run security scan
+bandit -r lookout_mra_client/
+
+# Build Docker image
+docker build -t mrav2-syslog-connector:test .
+```
+
+## License
+
+Current test coverage includes:
+- ✅ Configuration loading and parsing
+- ✅ Event type parsing
+- ✅ Proxy configuration
+- ✅ Event forwarder (QRadar and Splunk)
+- ✅ LEEF translator (MRA v1 and v2 formats)
+- ✅ Logger initialization
+- ✅ Stream thread behavior
+- ✅ Error handling for missing fields
 
 ## License
 
