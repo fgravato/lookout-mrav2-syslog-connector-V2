@@ -74,6 +74,7 @@ class MRAClient:
                 headers=headers,
                 params=params,
                 proxies=self.proxies,
+                timeout=30,
             )
             resp_json = response.json()
 

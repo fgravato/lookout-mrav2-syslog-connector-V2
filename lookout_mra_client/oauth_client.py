@@ -87,6 +87,7 @@ class OauthClient:
             data="grant_type=client_credentials",
             headers=self.token_header(self.api_key),
             proxies=self.proxies,
+            timeout=30,
         )
 
         try:
