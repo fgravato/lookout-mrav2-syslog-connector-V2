@@ -1,4 +1,7 @@
-import logging, threading, json, sys
+import json
+import logging
+import sys
+import threading
 from .event_forwarders.event_forwarder import EventForwarder
 from .lookout_logger import LOGGER_NAME
 from .mra_v2_stream import MRAv2Stream
@@ -36,7 +39,7 @@ class MRAv2StreamThread(threading.Thread):
             for event in self.stream.listenForEvents():
                 if self.shutdown_flag.is_set():
                     self.stream.shutdown()
-                    sys.exit(0)
+                    return
 
                 if event.event == "events":
                     mra_events = []

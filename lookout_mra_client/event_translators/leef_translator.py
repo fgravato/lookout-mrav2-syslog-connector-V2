@@ -35,18 +35,20 @@ class LeefTranslator:
             return self.__format_mra_v1_event(event)
 
     def __format_mra_v2_event(self, event: dict) -> str:
-        event_cat = event["change_type"]
+        event_type = event.get("type", "UNKNOWN")
+        event_cat = event.get("change_type", "UNKNOWN")
         cat_mapping = (("change_type", "cat"),)
 
         # Use details.classifications for a more granual categorization of threat events
-        if event["type"] == "THREAT":
+        if event_type == "THREAT":
             event_cat = event["threat"]["classifications"][0]
             cat_mapping = (("threat.classifications", "cat"),)
-        elif event["type"] == "DEVICE":
+        elif event_type == "DEVICE":
             # can contain: activationStatus, protectionStatus, securityStatus
-            device_status = event["device"]["status"]
+            device = event.get("device", {})
+            device_status = device.get("status", {})
             # ACTIVATED, DEACTIVATED, PENDING, DELETED
-            activation_status = device_status["activation_status"]
+            activation_status = device_status.get("activation_status", "UNKNOWN")
 
             if activation_status in ("DELETED", "DEACTIVATED", "PENDING"):
                 event_cat = activation_status
@@ -64,19 +66,20 @@ class LeefTranslator:
                     ),
                 )
             else:
-                event_cat = event["change_type"]
+                event_cat = event.get("change_type", "UNKNOWN")
                 cat_mapping = (("change_type", "cat"),)
 
-        elif event["type"] == "AUDIT":
-            event_cat = event["audit"]["type"]
+        elif event_type == "AUDIT":
+            audit = event.get("audit", {})
+            event_cat = audit.get("type", "UNKNOWN")
             cat_mapping = (("audit.type", "cat"),)
 
         mapping = cat_mapping + MRA_V2_LEEF_MAPPING
 
         timestamp = datetime.now().strftime(TIMESTAMP_FMT)
-        logId = event["qradarLogSourceIdentifier"]
+        logId = event.get("qradarLogSourceIdentifier", "LOOKOUT")
         leef_header = (
-            f"{timestamp} {logId} LEEF:2.0|Lookout|MRAv2 Client|2.0|{event['type']},{event_cat}|"
+            f"{timestamp} {logId} LEEF:2.0|Lookout|MRAv2 Client|2.0|{event_type},{event_cat}|"
         )
 
         mapped_event = transform_event(mapping, event)
@@ -85,24 +88,27 @@ class LeefTranslator:
         return leef_header + event_attr
 
     def __format_mra_v1_event(self, event: dict) -> str:
-        event_cat = event["details"]["type"]
+        event_type = event.get("type", "UNKNOWN")
+        details = event.get("details", {})
+        event_cat = details.get("type", "UNKNOWN")
         cat_mapping = (("details.type", "cat"),)
 
         # Use details.classifications for a more granual categorization of threat events
-        if event["type"] == "THREAT":
-            event_cat = event["details"]["classifications"][0]
+        if event_type == "THREAT":
+            classifications = details.get("classifications", ["UNKNOWN"])
+            event_cat = classifications[0] if classifications else "UNKNOWN"
             cat_mapping = (("details.classifications", "cat"),)
-        elif event["type"] == "DEVICE":
+        elif event_type == "DEVICE":
             # can contain: activationStatus, protectionStatus, securityStatus
-            updated_details = event["updatedDetails"]
+            updated_details = event.get("updatedDetails", {})
             # ACTIVATED, DEACTIVATED, PENDING, DELETED
-            activation_status = event["details"]["activationStatus"]
+            activation_status = details.get("activationStatus", "UNKNOWN")
 
             if activation_status in ("DELETED", "DEACTIVATED", "PENDING"):
                 event_cat = activation_status
                 cat_mapping = (("details.activationStatus", "cat"),)
             elif "securityStatus" in updated_details:
-                security_status = event["details"]["securityStatus"]
+                security_status = details.get("securityStatus", "UNKNOWN")
 
                 if "activationStatus" in updated_details:
                     event_cat = activation_status + "_" + security_status
@@ -121,9 +127,9 @@ class LeefTranslator:
         mapping = cat_mapping + MRA_V1_LEEF_MAPPING
 
         timestamp = datetime.now().strftime(TIMESTAMP_FMT)
-        logId = event["qradarLogSourceIdentifier"]
+        logId = event.get("qradarLogSourceIdentifier", "LOOKOUT")
         leef_header = (
-            f"{timestamp} {logId} LEEF:1.0|Lookout|SIEM Client|0.2|{event['type']},{event_cat}|"
+            f"{timestamp} {logId} LEEF:1.0|Lookout|SIEM Client|0.2|{event_type},{event_cat}|"
         )
 
         mapped_event = transform_event(mapping, event)

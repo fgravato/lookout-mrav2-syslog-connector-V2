@@ -19,8 +19,12 @@ from .lookout_logger import init_lookout_logger
 from .mra_v2_stream_thread import MRAv2StreamThread
 from .event_forwarders.qradar_event_forwarder import QRadarEventForwarder
 from .event_forwarders.splunk_event_forwarder import SplunkEventForwarder
+from .event_forwarders.event_forwarder import EventForwarder
 
 shutdown_event = threading.Event()
+
+# Type alias for config
+ConfigType = configparser.ConfigParser
 
 
 def signal_handler(sig, frame):
@@ -56,7 +60,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_config(config_file: str) -> dict:
+def load_config(config_file: str) -> configparser.ConfigParser:
     """Load configuration from INI file"""
     if not os.path.exists(config_file):
         raise FileNotFoundError(f"Configuration file not found: {config_file}")
@@ -72,7 +76,7 @@ def load_config(config_file: str) -> dict:
     return config
 
 
-def parse_event_types(config: configparser.ConfigParser) -> str:
+def parse_event_types(config: ConfigType) -> str:
     """Parse enabled event types from config"""
     event_types = []
     
@@ -86,7 +90,7 @@ def parse_event_types(config: configparser.ConfigParser) -> str:
     return ",".join(event_types) if event_types else "THREAT,DEVICE"
 
 
-def parse_proxy(config: configparser.ConfigParser) -> dict:
+def parse_proxy(config: ConfigType) -> dict:
     """Parse proxy configuration"""
     if "proxy" not in config:
         return {}
@@ -115,8 +119,8 @@ def parse_proxy(config: configparser.ConfigParser) -> dict:
 
 
 def create_event_forwarder(
-    config: configparser.ConfigParser, logger: logging.Logger
-) -> Tuple:
+    config: ConfigType, logger: logging.Logger
+) -> EventForwarder:
     """Create appropriate event forwarder based on config"""
     syslog_host = config.get("syslog", "host", fallback="localhost")
     syslog_port = config.getint("syslog", "port", fallback=514)
@@ -129,9 +133,7 @@ def create_event_forwarder(
 
     if forwarder_type == "splunk":
         logger.info(f"Using Splunk event forwarder to {syslog_host}:{syslog_port}")
-        return SplunkEventForwarder(
-            console_address, log_identifier_key, log_identifier, None
-        )
+        return SplunkEventForwarder(callback=None)
     else:
         logger.info(f"Using QRadar event forwarder to {syslog_host}:{syslog_port}")
         return QRadarEventForwarder(

@@ -27,7 +27,7 @@ def init_lookout_logger(
     if len(logger.handlers) == 0:
         formatter = logging.Formatter("%(asctime)s [%(name)s] [%(levelname)s] %(message)s")
 
-        maxBytes = maxMegabytes * 1e6
+        maxBytes = int(maxMegabytes * 1_000_000)
         file_handler = RotatingFileHandler(file, maxBytes=maxBytes, backupCount=backupCount)
         file_handler.formatter = formatter
 

@@ -44,4 +44,5 @@ class QRadarEventForwarder(EventForwarder):
             # Write to syslog
             syslog_client.write(event)
 
-        self.callback(events)
+        if self.callback:
+            self.callback(events)
