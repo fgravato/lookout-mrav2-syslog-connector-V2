@@ -1,3 +1,4 @@
+import copy
 import time
 
 from .event_forwarder import EventForwarder
@@ -33,7 +34,31 @@ class QRadarEventForwarder(EventForwarder):
             client_name, self.event_translator.formatEvent, self.qradar_address
         )
 
-        for event in events:
+        def flatten_events():
+            """Flatten SMISHING_ALERT events with multiple detections into individual events."""
+            for event in events:
+                # Handle SMISHING_ALERT events with multiple detections
+                if event.get("type") == "SMISHING_ALERT":
+                    detections = event.get("smishing_alert", {}).get("detections", [])
+                    if detections:
+                        for detection in detections:
+                            # Create a deep copy of the event
+                            new_event = copy.deepcopy(event)
+                            # Remove the 'detections' key
+                            if "smishing_alert" in new_event and "detections" in new_event["smishing_alert"]:
+                                del new_event["smishing_alert"]["detections"]
+                            # Add the individual detection to the event
+                            new_event["smishing_alert"]["detection"] = detection
+                            yield new_event
+                    else:
+                        # No detections, yield the original event
+                        yield event
+                else:
+                    yield event
+
+        flattened_events = list(flatten_events())
+        
+        for event in flattened_events:
             # set defaults if not present
             event["entName"] = entName
             event["details"] = event.get("details", {})
@@ -45,4 +70,4 @@ class QRadarEventForwarder(EventForwarder):
             syslog_client.write(event)
 
         if self.callback:
-            self.callback(events)
+            self.callback(flattened_events)
