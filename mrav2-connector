@@ -20,6 +20,6 @@ if [ ! -f "$PYTHON_MAIN" ]; then
     exit 1
 fi
 
-# Activate virtual environment and run
+# Activate virtual environment and run as module
 export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH}"
-exec "${VENV_DIR}/bin/python3" "$PYTHON_MAIN" "$@"
+exec "${VENV_DIR}/bin/python3" -m lookout_mra_client.main "$@"
