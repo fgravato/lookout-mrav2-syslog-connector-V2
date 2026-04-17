@@ -12,6 +12,7 @@ import os
 import signal
 import sys
 import threading
+import time
 from datetime import datetime
 from typing import Tuple
 
@@ -25,6 +26,16 @@ shutdown_event = threading.Event()
 
 # Type alias for config
 ConfigType = configparser.ConfigParser
+
+
+_SAVE_INTERVAL_SECONDS = 30  # how often to persist stream_position during normal operation
+
+
+def save_stream_position(config: ConfigType, config_file: str, position: int) -> None:
+    """Write stream_position back to config.ini so restarts resume from here."""
+    config.set("lookout", "stream_position", str(position))
+    with open(config_file, "w") as fh:
+        config.write(fh)
 
 
 def signal_handler(sig, frame):
@@ -221,16 +232,34 @@ def main():
         logger.info("MRAv2 Syslog Connector started successfully")
         logger.info("Press Ctrl+C to stop")
 
-        # Wait for shutdown signal
+        # Wait for shutdown signal, periodically persisting the stream position
+        # so that a clean restart resumes from where we left off instead of
+        # replaying from the beginning.
+        last_saved_position = 0
+        last_save_time = time.time()
         while not shutdown_event.is_set():
             threading.Event().wait(1)
+            now = time.time()
+            if now - last_save_time >= _SAVE_INTERVAL_SECONDS:
+                current_position = mra_thread.stream.last_event_id
+                if current_position and current_position != last_saved_position:
+                    save_stream_position(config, args.config, current_position)
+                    logger.debug(f"Stream position {current_position} saved")
+                    last_saved_position = current_position
+                last_save_time = now
 
         # Shutdown gracefully
         logger.info("Shutting down...")
         mra_thread.shutdown_flag.set()
         if mra_thread.is_alive():
             mra_thread.join(timeout=10)
-        
+
+        # Final position save so the next restart resumes exactly where we stopped
+        final_position = mra_thread.stream.last_event_id
+        if final_position and final_position != last_saved_position:
+            save_stream_position(config, args.config, final_position)
+            logger.info(f"Stream position {final_position} saved on shutdown")
+
         logger.info("MRAv2 Syslog Connector stopped")
 
     except Exception as e:
