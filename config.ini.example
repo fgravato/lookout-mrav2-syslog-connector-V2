@@ -1,5 +1,21 @@
 # MRAv2 Syslog Connector Configuration
 # Copy this file to config.ini and update with your values
+#
+# RSYSLOG SETUP (receiver side)
+# By default rsyslog only reads from /dev/log. To accept remote events,
+# add the following to /etc/rsyslog.d/50-mrav2.conf and restart rsyslog:
+#
+#   For TCP (recommended, matches use_udp = false):
+#     module(load="imtcp")
+#     input(type="imtcp" port="514")
+#
+#   For UDP (matches use_udp = true):
+#     module(load="imudp")
+#     input(type="imudp" port="514")
+#
+#   To write events to a dedicated file:
+#     if $fromhost-ip == 'YOUR_CONNECTOR_IP' then /var/log/mrav2-events.log
+#     & stop
 
 [lookout]
 # Your Lookout entity/tenant name

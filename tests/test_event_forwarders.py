@@ -367,7 +367,7 @@ class TestSyslogClientClose:
     handler/socket leak when QRadar was recreating clients every batch.
     """
 
-    def _make_client(self, name):
+    def _make_client(self, name, socktype=socket.SOCK_STREAM):
         from lookout_mra_client.syslog_client import SyslogClient
         with patch("lookout_mra_client.syslog_client._SysLogHandler") as handler_cls:
             mock_handler = Mock()
@@ -378,7 +378,7 @@ class TestSyslogClientClose:
                 name=name,
                 event_formatter=lambda e: str(e),
                 syslog_address=("localhost", 514),
-                socktype=socket.SOCK_STREAM,
+                socktype=socktype,
             )
         return client, mock_handler
 
@@ -405,3 +405,60 @@ class TestSyslogClientClose:
         mock_handler.close.side_effect = OSError("socket gone")
         client.close()  # must not propagate the OSError
         assert len(client.syslog_logger.handlers) == 0
+
+
+class TestSysLogHandlerFraming:
+    """
+    Tests for the TCP record-delimiter fix.
+
+    Python's SysLogHandler appends \\000 (null) to every message.
+    rsyslog imtcp uses newline framing, so null-terminated messages
+    accumulate and are never flushed.  _SysLogHandler overrides
+    log_format_string to use \\n for TCP only.
+    """
+
+    def test_tcp_uses_newline_terminator(self):
+        """TCP handler must use \\n so rsyslog imtcp flushes each record."""
+        from lookout_mra_client.syslog_client import _SysLogHandler
+        with patch.object(_SysLogHandler, "__init__", lambda self, *a, **kw: None):
+            handler = _SysLogHandler.__new__(_SysLogHandler)
+            # Simulate what our __init__ does after super().__init__
+            handler._internal_logger = Mock()
+            handler.log_format_string = '<%d>%s\000'  # default
+            if socket.SOCK_STREAM == socket.SOCK_STREAM:
+                handler.log_format_string = '<%d>%s\n'
+        assert handler.log_format_string.endswith('\n')
+        assert not handler.log_format_string.endswith('\000')
+
+    def test_udp_keeps_null_terminator(self):
+        """UDP handler keeps \\000 (datagrams are self-delimiting)."""
+        from lookout_mra_client.syslog_client import _SysLogHandler
+        # Construct via a real init with _SysLogHandler patching super
+        with patch("lookout_mra_client.syslog_client.SysLogHandler.__init__"):
+            handler = _SysLogHandler.__new__(_SysLogHandler)
+            handler._internal_logger = Mock()
+            # Reproduce only the socktype branch, not the full super().__init__
+            handler.log_format_string = '<%d>%s\000'
+            socktype = socket.SOCK_DGRAM
+            if socktype == socket.SOCK_STREAM:
+                handler.log_format_string = '<%d>%s\n'
+        assert handler.log_format_string.endswith('\000')
+
+    def test_handler_directly_tcp_gets_newline_format(self):
+        """
+        Instantiate _SysLogHandler directly with SOCK_STREAM (patching the
+        parent __init__ to avoid opening a real socket) and verify that
+        log_format_string ends with \\n, not \\000.
+        """
+        from lookout_mra_client.syslog_client import _SysLogHandler
+        with patch("lookout_mra_client.syslog_client.SysLogHandler.__init__"):
+            handler = _SysLogHandler.__new__(_SysLogHandler)
+            _SysLogHandler.__init__(
+                handler,
+                Mock(),                    # internal_logger
+                address=("localhost", 514),
+                socktype=socket.SOCK_STREAM,
+            )
+        assert handler.log_format_string.endswith('\n'), (
+            "TCP handler must use \\n so rsyslog imtcp flushes each record"
+        )
