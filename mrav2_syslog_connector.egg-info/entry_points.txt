@@ -1,0 +1,2 @@
+[console_scripts]
+mrav2-syslog-connector = lookout_mra_client.main:main

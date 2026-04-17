@@ -21,13 +21,13 @@ sudo bash packaging/install.sh
 ```bash
 cd packaging
 make deb
-sudo dpkg -i build/mrav2-syslog-connector_2.6.9_all.deb
+sudo dpkg -i build/mrav2-syslog-connector_2.6.12_all.deb
 ```
 
 ### Option 3: Docker (Recommended for most users)
 
 ```bash
-docker pull ghcr.io/fgravato/lookout-mrav2-syslog-connector-v2:v2.6.9
+docker pull ghcr.io/fgravato/lookout-mrav2-syslog-connector-v2:v2.6.12
 docker run -d -v $(pwd)/config.ini:/app/config.ini:ro mrav2-syslog-connector
 ```
 

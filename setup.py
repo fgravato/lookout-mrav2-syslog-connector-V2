@@ -8,7 +8,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="mrav2-syslog-connector",
-    version="2.6.11",
+    version="2.6.12",
     author="Lookout",
     description="Lookout Mobile Risk API v2 to Syslog Connector",
     long_description=long_description,

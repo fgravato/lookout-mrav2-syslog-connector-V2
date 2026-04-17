@@ -1,6 +1,6 @@
 .PHONY: all install uninstall clean deb rpm
 
-VERSION := 2.6.9
+VERSION := 2.6.12
 PACKAGE_NAME := mrav2-syslog-connector
 
 all: help
