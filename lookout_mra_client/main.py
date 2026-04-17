@@ -195,7 +195,13 @@ def main():
             "proxies": proxies,
         }
 
-        # Set stream position or start time
+        # Set stream position or start time.
+        # NOTE: The Lookout API treats id=0 as "start from current position"
+        # (live tail), not "replay from the beginning of history".  When no
+        # explicit position or start_time is configured we therefore default
+        # to a far-back start_time so that all available events are replayed
+        # on first run.  Once events are processed the stream position is
+        # persisted and subsequent restarts resume from where they left off.
         if stream_position and stream_position != "0":
             stream_args["last_event_id"] = int(stream_position)
             logger.info(f"Starting from stream position: {stream_position}")
@@ -204,8 +210,9 @@ def main():
             stream_args["start_time"] = start_time
             logger.info(f"Starting from time: {start_time}")
         else:
-            stream_args["last_event_id"] = 0
-            logger.info("Starting from beginning (position 0)")
+            default_start = datetime(2020, 1, 1)
+            stream_args["start_time"] = default_start
+            logger.info(f"No position or start_time configured — replaying from {default_start.date()} (all available history)")
 
         # Create and start MRA stream thread
         mra_thread = MRAv2StreamThread(entity_name, event_forwarder, **stream_args)

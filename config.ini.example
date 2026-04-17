@@ -32,12 +32,16 @@ threat_enabled = true
 device_enabled = true
 audit_enabled = false
 
-# Stream position to start from (leave as 0 to start from beginning)
-# This will be automatically updated as events are processed
+# Stream position to start from.
+# This is automatically updated as events are processed — do not edit manually
+# unless you need to replay events.  Set to 0 to let start_time control replay.
 stream_position = 0
 
-# Alternative: Start from a specific time (ISO format)
-# If stream_position is set, this is ignored
+# Start time for event replay (ISO format).
+# Used when stream_position = 0.  If both are unset the connector defaults to
+# 2020-01-01 so that all available history is replayed on first run.
+# NOTE: The Lookout API treats id=0 as "live tail" — start_time is required
+# to replay historical events.
 # start_time = 2024-01-01T00:00:00
 
 [syslog]
