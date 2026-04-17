@@ -32,7 +32,7 @@ class MRAv2Stream:
         self,
         api_domain: str,
         api_key: str,
-        last_event_id: int = 0,
+        last_event_id: str = "0",
         start_time: datetime = None,
         event_type: str = "THREAT,DEVICE",
         proxies: dict = None,

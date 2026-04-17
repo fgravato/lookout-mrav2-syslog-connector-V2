@@ -214,7 +214,7 @@ def main():
         # on first run.  Once events are processed the stream position is
         # persisted and subsequent restarts resume from where they left off.
         if stream_position and stream_position != "0":
-            stream_args["last_event_id"] = int(stream_position)
+            stream_args["last_event_id"] = stream_position
             logger.info(f"Starting from stream position: {stream_position}")
         elif start_time_str:
             start_time = datetime.fromisoformat(start_time_str)
@@ -235,7 +235,7 @@ def main():
         # Wait for shutdown signal, periodically persisting the stream position
         # so that a clean restart resumes from where we left off instead of
         # replaying from the beginning.
-        last_saved_position = 0
+        last_saved_position = "0"
         last_save_time = time.time()
         while not shutdown_event.is_set():
             threading.Event().wait(1)
