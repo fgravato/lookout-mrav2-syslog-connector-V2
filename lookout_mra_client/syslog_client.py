@@ -42,6 +42,12 @@ class SyslogClient(object):
     Generic Syslog client used to emit MRA events.
     Uses Python's SysLogHandler (correct syslog framing) with explicit
     error logging so failures are never swallowed silently.
+
+    If the syslog target is not reachable at startup the connect error is
+    logged and the handler is NOT added.  Every subsequent write() checks
+    whether a handler exists and retries the connection transparently, so
+    events are forwarded as soon as the target becomes available without
+    requiring a connector restart.
     """
 
     def __init__(
@@ -56,25 +62,58 @@ class SyslogClient(object):
         self.event_formatter = event_formatter
         self.syslog_address = syslog_address
         self.log_internally = log_internally
+        self._socktype = socktype
         self.internal_logger = logging.getLogger(LOGGER_NAME)
 
         self.syslog_logger = logging.getLogger(name)
         self.syslog_logger.propagate = False
         self.syslog_logger.setLevel(logging.INFO)
 
+        self._try_connect()
+
+    def _try_connect(self) -> bool:
+        """Attempt to connect to the syslog target.  Returns True on success."""
         try:
             handler = _SysLogHandler(
                 self.internal_logger,
-                address=syslog_address,
-                socktype=socktype,
+                address=self.syslog_address,
+                socktype=self._socktype,
             )
             handler.formatter = logging.Formatter("%(message)s")
-            self.syslog_logger.addHandler(handler)
-            self.internal_logger.debug(f"SyslogClient connected to {syslog_address}")
+            with self.lock:
+                # Clear any stale handlers before adding the new one.
+                for h in list(self.syslog_logger.handlers):
+                    try:
+                        h.close()
+                    except Exception:
+                        pass
+                    self.syslog_logger.removeHandler(h)
+                self.syslog_logger.addHandler(handler)
+            self.internal_logger.info(f"SyslogClient connected to {self.syslog_address}")
+            return True
         except Exception as e:
-            self.internal_logger.error(f"SyslogClient failed to connect to {syslog_address}: {e}")
+            self.internal_logger.error(
+                f"SyslogClient failed to connect to {self.syslog_address}: {e}"
+            )
+            return False
 
     def write(self, event: dict) -> None:
+        # Lazy reconnect: if no handler exists (initial connect failed or
+        # the handler was closed externally), attempt to reconnect now.
+        if not self.syslog_logger.handlers:
+            if not self._try_connect():
+                # Still can't connect — log the event internally if requested
+                # so it isn't silently lost, then return.
+                if self.log_internally:
+                    try:
+                        event_text = self.event_formatter(event)
+                        self.internal_logger.warning(
+                            f"Syslog unreachable, event dropped: {event_text}"
+                        )
+                    except Exception:
+                        pass
+                return
+
         event_text = self.event_formatter(event)
 
         with self.lock:
