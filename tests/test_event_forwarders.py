@@ -8,6 +8,7 @@ Covers:
 """
 
 import json
+import logging
 import socket
 import time
 import pytest
@@ -411,54 +412,77 @@ class TestSysLogHandlerFraming:
     """
     Tests for the TCP record-delimiter fix.
 
-    Python's SysLogHandler appends \\000 (null) to every message.
-    rsyslog imtcp uses newline framing, so null-terminated messages
-    accumulate and are never flushed.  _SysLogHandler overrides
-    log_format_string to use \\n for TCP only.
+    Python 3.3+ rewrote SysLogHandler.emit() to use append_nul instead of
+    log_format_string, so patching log_format_string has no effect.  We
+    override emit() directly for TCP to produce \\n-terminated records
+    (required by rsyslog imtcp).  These tests verify that override by
+    exercising emit() against a real loopback socket.
     """
 
-    def test_tcp_uses_newline_terminator(self):
-        """TCP handler must use \\n so rsyslog imtcp flushes each record."""
+    def _make_handler(self, socktype):
+        """Start a listening socket, connect a _SysLogHandler to it, return both."""
         from lookout_mra_client.syslog_client import _SysLogHandler
-        with patch.object(_SysLogHandler, "__init__", lambda self, *a, **kw: None):
-            handler = _SysLogHandler.__new__(_SysLogHandler)
-            # Simulate what our __init__ does after super().__init__
-            handler._internal_logger = Mock()
-            handler.log_format_string = '<%d>%s\000'  # default
-            if socket.SOCK_STREAM == socket.SOCK_STREAM:
-                handler.log_format_string = '<%d>%s\n'
-        assert handler.log_format_string.endswith('\n')
-        assert not handler.log_format_string.endswith('\000')
-
-    def test_udp_keeps_null_terminator(self):
-        """UDP handler keeps \\000 (datagrams are self-delimiting)."""
-        from lookout_mra_client.syslog_client import _SysLogHandler
-        # Construct via a real init with _SysLogHandler patching super
-        with patch("lookout_mra_client.syslog_client.SysLogHandler.__init__"):
-            handler = _SysLogHandler.__new__(_SysLogHandler)
-            handler._internal_logger = Mock()
-            # Reproduce only the socktype branch, not the full super().__init__
-            handler.log_format_string = '<%d>%s\000'
-            socktype = socket.SOCK_DGRAM
-            if socktype == socket.SOCK_STREAM:
-                handler.log_format_string = '<%d>%s\n'
-        assert handler.log_format_string.endswith('\000')
-
-    def test_handler_directly_tcp_gets_newline_format(self):
-        """
-        Instantiate _SysLogHandler directly with SOCK_STREAM (patching the
-        parent __init__ to avoid opening a real socket) and verify that
-        log_format_string ends with \\n, not \\000.
-        """
-        from lookout_mra_client.syslog_client import _SysLogHandler
-        with patch("lookout_mra_client.syslog_client.SysLogHandler.__init__"):
-            handler = _SysLogHandler.__new__(_SysLogHandler)
-            _SysLogHandler.__init__(
-                handler,
-                Mock(),                    # internal_logger
-                address=("localhost", 514),
-                socktype=socket.SOCK_STREAM,
-            )
-        assert handler.log_format_string.endswith('\n'), (
-            "TCP handler must use \\n so rsyslog imtcp flushes each record"
+        srv = socket.socket(socket.AF_INET, socktype)
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind(("127.0.0.1", 0))
+        port = srv.getsockname()[1]
+        if socktype == socket.SOCK_STREAM:
+            srv.listen(1)
+        handler = _SysLogHandler(
+            Mock(),
+            address=("127.0.0.1", port),
+            socktype=socktype,
         )
+        handler.formatter = logging.Formatter("%(message)s")
+        return handler, srv, port
+
+    def test_tcp_emit_sends_newline_terminated_record(self):
+        """TCP emit() must produce <PRI>message\\n so rsyslog imtcp flushes it."""
+        handler, srv, _ = self._make_handler(socket.SOCK_STREAM)
+        conn, _ = srv.accept()
+        conn.settimeout(2)
+        record = logging.LogRecord("test", logging.INFO, "", 0, "hello world", (), None)
+        handler.emit(record)
+        data = conn.recv(4096)
+        conn.close()
+        srv.close()
+        handler.close()
+        assert data.endswith(b'\n'), f"Expected \\n terminator, got {data!r}"
+        assert b'\x00' not in data, "TCP frame must not contain null byte"
+        assert b'hello world' in data
+
+    def test_tcp_emit_no_1024_byte_truncation(self):
+        """TCP emit() must not truncate messages at 1024 bytes (LEEF can be larger)."""
+        handler, srv, _ = self._make_handler(socket.SOCK_STREAM)
+        conn, _ = srv.accept()
+        conn.settimeout(2)
+        long_msg = "X" * 2000
+        record = logging.LogRecord("test", logging.INFO, "", 0, long_msg, (), None)
+        handler.emit(record)
+        data = conn.recv(8192)
+        conn.close()
+        srv.close()
+        handler.close()
+        assert long_msg.encode() in data, "Long message must not be truncated"
+
+    def test_tcp_handler_sets_is_tcp_flag(self):
+        """_SysLogHandler must mark itself as TCP for emit() dispatch."""
+        from lookout_mra_client.syslog_client import _SysLogHandler
+        with patch("lookout_mra_client.syslog_client.SysLogHandler.__init__"):
+            h = _SysLogHandler.__new__(_SysLogHandler)
+            h._internal_logger = Mock()
+            _SysLogHandler.__init__(
+                h, Mock(), address=("localhost", 514), socktype=socket.SOCK_STREAM
+            )
+        assert h._is_tcp is True
+
+    def test_udp_handler_sets_is_tcp_false(self):
+        """UDP handler must not set _is_tcp, leaving emit() to super()."""
+        from lookout_mra_client.syslog_client import _SysLogHandler
+        with patch("lookout_mra_client.syslog_client.SysLogHandler.__init__"):
+            h = _SysLogHandler.__new__(_SysLogHandler)
+            h._internal_logger = Mock()
+            _SysLogHandler.__init__(
+                h, Mock(), address=("localhost", 514), socktype=socket.SOCK_DGRAM
+            )
+        assert h._is_tcp is False

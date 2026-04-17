@@ -11,24 +11,31 @@ class _SysLogHandler(SysLogHandler):
     SysLogHandler that surfaces errors to the connector log instead of
     swallowing them silently via the default handleError().
 
-    Also fixes the TCP record delimiter: Python's SysLogHandler appends
-    \\000 (null) which rsyslog imtcp never flushes because it expects \\n.
-    We override the format string to use \\n for TCP and keep \\000 for UDP
-    (UDP datagrams are self-delimiting so the terminator doesn't matter).
+    Also fixes the TCP record delimiter: Python 3.3+ rewrote emit() to use
+    append_nul instead of log_format_string, so patching log_format_string
+    has no effect on modern Python.  We override emit() directly for TCP to
+    use \\n framing (required by rsyslog imtcp and RFC-6587 octet-stuffing)
+    and to remove the 1024-byte UDP cap that would silently truncate LEEF
+    events.  UDP path is left to super().emit() unchanged.
     """
-
-    # Default format used by SysLogHandler for all socket types.
-    # We patch it per-instance in __init__ based on socktype.
-    log_format_string = '<%d>%s\000'
 
     def __init__(self, internal_logger, *args, **kwargs):
         self._internal_logger = internal_logger
-        socktype = kwargs.get("socktype", socket.SOCK_DGRAM)
+        self._is_tcp = kwargs.get("socktype", socket.SOCK_DGRAM) == socket.SOCK_STREAM
         super().__init__(*args, **kwargs)
-        # rsyslog imtcp (and most RFC-3164 TCP receivers) use newline framing;
-        # the null terminator causes messages to accumulate and never flush.
-        if socktype == socket.SOCK_STREAM:
-            self.log_format_string = '<%d>%s\n'
+
+    def emit(self, record):
+        if self._is_tcp:
+            try:
+                msg = self.format(record)
+                prio = '<%d>' % self.encodePriority(
+                    self.facility, self.mapPriority(record.levelname))
+                data = (prio + msg + '\n').encode('utf-8')
+                self.socket.sendall(data)
+            except Exception:
+                self.handleError(record)
+        else:
+            super().emit(record)
 
     def handleError(self, record):
         import traceback
