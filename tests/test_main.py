@@ -149,20 +149,21 @@ password =
 
 class TestCreateEventForwarder:
     """Tests for create_event_forwarder function."""
-    
+
     def test_create_qradar_forwarder(self, temp_config_file):
-        """Test creating QRadar event forwarder."""
+        """QRadar forwarder is returned when forwarder_type=qradar."""
         config = load_config(temp_config_file)
         mock_logger = Mock()
-        
-        forwarder = create_event_forwarder(config, mock_logger)
-        
-        assert forwarder.__class__.__name__ == 'QRadarEventForwarder'
+
+        with patch("lookout_mra_client.event_forwarders.qradar_event_forwarder.SyslogClient"):
+            forwarder = create_event_forwarder(config, mock_logger)
+
+        assert forwarder.__class__.__name__ == "QRadarEventForwarder"
         mock_logger.info.assert_called_once()
-    
+
     def test_create_splunk_forwarder(self, temp_config_file):
-        """Test creating Splunk event forwarder."""
-        with open(temp_config_file, 'w') as f:
+        """Splunk forwarder is returned when forwarder_type=splunk."""
+        with open(temp_config_file, "w") as f:
             f.write("""
 [lookout]
 entity_name = test
@@ -172,13 +173,68 @@ host = localhost
 port = 514
 forwarder_type = splunk
 """)
-        
         config = load_config(temp_config_file)
         mock_logger = Mock()
-        
-        forwarder = create_event_forwarder(config, mock_logger)
-        
-        assert forwarder.__class__.__name__ == 'SplunkEventForwarder'
+
+        with patch("lookout_mra_client.event_forwarders.splunk_event_forwarder.SyslogClient"):
+            forwarder = create_event_forwarder(config, mock_logger)
+
+        assert forwarder.__class__.__name__ == "SplunkEventForwarder"
+
+    def test_splunk_forwarder_receives_correct_address(self, temp_config_file):
+        """create_event_forwarder must pass host:port to the Splunk forwarder."""
+        with open(temp_config_file, "w") as f:
+            f.write("""
+[lookout]
+entity_name = test
+
+[syslog]
+host = syslog.corp.internal
+port = 5514
+forwarder_type = splunk
+use_udp = false
+""")
+        config = load_config(temp_config_file)
+        mock_logger = Mock()
+
+        with patch("lookout_mra_client.event_forwarders.splunk_event_forwarder.SyslogClient") as sc:
+            sc.return_value = Mock()
+            forwarder = create_event_forwarder(config, mock_logger)
+
+        assert forwarder.syslog_address == ("syslog.corp.internal", 5514)
+
+    def test_splunk_forwarder_udp_flag_propagated(self, temp_config_file):
+        """use_udp=true in config selects SOCK_DGRAM for the Splunk forwarder."""
+        import socket
+        with open(temp_config_file, "w") as f:
+            f.write("""
+[lookout]
+entity_name = test
+
+[syslog]
+host = localhost
+port = 514
+forwarder_type = splunk
+use_udp = true
+""")
+        config = load_config(temp_config_file)
+        mock_logger = Mock()
+
+        with patch("lookout_mra_client.event_forwarders.splunk_event_forwarder.SyslogClient"):
+            forwarder = create_event_forwarder(config, mock_logger)
+
+        assert forwarder.socktype == socket.SOCK_DGRAM
+
+    def test_qradar_forwarder_tcp_by_default(self, temp_config_file):
+        """QRadar forwarder defaults to TCP when use_udp is absent."""
+        import socket
+        config = load_config(temp_config_file)
+        mock_logger = Mock()
+
+        with patch("lookout_mra_client.event_forwarders.qradar_event_forwarder.SyslogClient"):
+            forwarder = create_event_forwarder(config, mock_logger)
+
+        assert forwarder.socktype == socket.SOCK_STREAM
 
 
 class TestParseArgs:

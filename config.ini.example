@@ -26,18 +26,26 @@ stream_position = 0
 
 [syslog]
 # Syslog server hostname or IP
+# Used by both qradar and splunk forwarder types.
 host = localhost
 
 # Syslog server port (default: 514 for UDP, 601 for TCP)
+# For Splunk Universal Forwarder syslog input, typically 5514 or a custom port.
 port = 514
 
 # Forwarder type: qradar or splunk
+#   qradar  - sends LEEF 2.0 formatted messages over syslog TCP/UDP
+#   splunk  - sends JSON formatted messages over syslog TCP/UDP
 forwarder_type = qradar
 
+# Protocol: set to true for UDP, false for TCP (default: false/TCP)
+# TCP is recommended for production (both QRadar and Splunk). Use UDP for testing.
+use_udp = false
+
 # Optional: Custom log identifier key and value
-# These are added to the syslog message for filtering/routing
-log_identifier_key = 
-log_identifier = 
+# These are added to the syslog message for filtering/routing (QRadar path only).
+log_identifier_key =
+log_identifier =
 
 [proxy]
 # Optional: HTTP/HTTPS proxy configuration

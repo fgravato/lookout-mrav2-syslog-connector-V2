@@ -41,7 +41,9 @@ class LeefTranslator:
 
         # Use details.classifications for a more granual categorization of threat events
         if event_type == "THREAT":
-            event_cat = event["threat"]["classifications"][0]
+            threat = event.get("threat") or {}
+            classifications = threat.get("classifications") or []
+            event_cat = classifications[0] if classifications else "UNKNOWN"
             cat_mapping = (("threat.classifications", "cat"),)
         elif event_type == "DEVICE":
             # can contain: activationStatus, protectionStatus, securityStatus

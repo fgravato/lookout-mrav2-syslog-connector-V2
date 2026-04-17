@@ -128,16 +128,23 @@ def create_event_forwarder(
     
     log_identifier_key = config.get("syslog", "log_identifier_key", fallback="")
     log_identifier = config.get("syslog", "log_identifier", fallback="")
+    use_udp = config.getboolean("syslog", "use_udp", fallback=False)
 
     console_address = (syslog_host, syslog_port)
 
     if forwarder_type == "splunk":
-        logger.info(f"Using Splunk event forwarder to {syslog_host}:{syslog_port}")
-        return SplunkEventForwarder(callback=None)
+        protocol = "UDP" if use_udp else "TCP"
+        logger.info(f"Using Splunk event forwarder to {syslog_host}:{syslog_port} ({protocol})")
+        return SplunkEventForwarder(
+            syslog_address=console_address,
+            callback=None,
+            use_udp=use_udp,
+        )
     else:
-        logger.info(f"Using QRadar event forwarder to {syslog_host}:{syslog_port}")
+        protocol = "UDP" if use_udp else "TCP"
+        logger.info(f"Using QRadar event forwarder to {syslog_host}:{syslog_port} ({protocol})")
         return QRadarEventForwarder(
-            console_address, log_identifier_key, log_identifier, None
+            console_address, log_identifier_key, log_identifier, None, use_udp=use_udp
         )
 
 
