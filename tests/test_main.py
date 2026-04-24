@@ -18,6 +18,8 @@ from lookout_mra_client.main import (
     parse_proxy,
     create_event_forwarder,
     parse_args,
+    default_state_file,
+    _warn_if_config_world_readable,
 )
 
 
@@ -239,27 +241,117 @@ use_udp = true
 
 class TestParseArgs:
     """Tests for parse_args function."""
-    
+
     def test_parse_required_config(self):
         """Test parsing required config argument."""
         test_args = ['--config', '/path/to/config.ini']
-        
+
         with patch.object(sys, 'argv', ['mrav2-connector'] + test_args):
             args = parse_args()
             assert args.config == '/path/to/config.ini'
-    
+
     def test_parse_optional_log_file(self):
         """Test parsing optional log file argument."""
         test_args = ['--config', 'config.ini', '--log-file', '/var/log/test.log']
-        
+
         with patch.object(sys, 'argv', ['mrav2-connector'] + test_args):
             args = parse_args()
             assert args.log_file == '/var/log/test.log'
-    
+
     def test_parse_verbose_flag(self):
         """Test parsing verbose flag."""
         test_args = ['--config', 'config.ini', '--verbose']
-        
+
         with patch.object(sys, 'argv', ['mrav2-connector'] + test_args):
             args = parse_args()
             assert args.verbose is True
+
+    def test_parse_state_file_explicit(self):
+        """--state-file overrides the default derived path."""
+        test_args = ['--config', 'config.ini', '--state-file', '/var/lib/mrav2/pos.state']
+
+        with patch.object(sys, 'argv', ['mrav2-connector'] + test_args):
+            args = parse_args()
+            assert args.state_file == '/var/lib/mrav2/pos.state'
+
+    def test_state_file_defaults_to_none(self):
+        """state_file is None when not provided (caller derives the path)."""
+        test_args = ['--config', 'config.ini']
+
+        with patch.object(sys, 'argv', ['mrav2-connector'] + test_args):
+            args = parse_args()
+            assert args.state_file is None
+
+
+class TestCreateEventForwarderPortValidation:
+    """Tests for syslog port range validation."""
+
+    def test_invalid_port_zero_raises(self, temp_config_file):
+        with open(temp_config_file, "w") as f:
+            f.write("[lookout]\nentity_name=test\n\n[syslog]\nhost=localhost\nport=0\n")
+        config = load_config(temp_config_file)
+        with pytest.raises(ValueError, match="port"):
+            create_event_forwarder(config, Mock())
+
+    def test_invalid_port_too_high_raises(self, temp_config_file):
+        with open(temp_config_file, "w") as f:
+            f.write("[lookout]\nentity_name=test\n\n[syslog]\nhost=localhost\nport=99999\n")
+        config = load_config(temp_config_file)
+        with pytest.raises(ValueError, match="port"):
+            create_event_forwarder(config, Mock())
+
+    def test_valid_port_boundary_low(self, temp_config_file):
+        with open(temp_config_file, "w") as f:
+            f.write("[lookout]\nentity_name=test\n\n[syslog]\nhost=localhost\nport=1\n")
+        config = load_config(temp_config_file)
+        with patch("lookout_mra_client.event_forwarders.qradar_event_forwarder.SyslogClient"):
+            create_event_forwarder(config, Mock())  # must not raise
+
+    def test_valid_port_boundary_high(self, temp_config_file):
+        with open(temp_config_file, "w") as f:
+            f.write("[lookout]\nentity_name=test\n\n[syslog]\nhost=localhost\nport=65535\n")
+        config = load_config(temp_config_file)
+        with patch("lookout_mra_client.event_forwarders.qradar_event_forwarder.SyslogClient"):
+            create_event_forwarder(config, Mock())  # must not raise
+
+
+class TestConfigPermissions:
+    """Tests for _warn_if_config_world_readable."""
+
+    def test_warns_on_world_readable_file(self, tmp_path):
+        cfg = tmp_path / "config.ini"
+        cfg.write_text("[lookout]\n")
+        cfg.chmod(0o644)
+        mock_logger = Mock()
+        _warn_if_config_world_readable(str(cfg), mock_logger)
+        mock_logger.warning.assert_called_once()
+        assert "chmod 600" in mock_logger.warning.call_args[0][0]
+
+    def test_no_warning_on_owner_only_file(self, tmp_path):
+        cfg = tmp_path / "config.ini"
+        cfg.write_text("[lookout]\n")
+        cfg.chmod(0o600)
+        mock_logger = Mock()
+        _warn_if_config_world_readable(str(cfg), mock_logger)
+        mock_logger.warning.assert_not_called()
+
+    def test_no_crash_on_missing_file(self, tmp_path):
+        mock_logger = Mock()
+        _warn_if_config_world_readable(str(tmp_path / "nope.ini"), mock_logger)  # must not raise
+
+
+class TestDefaultStateFile:
+    """Tests for default_state_file helper."""
+
+    def test_replaces_ini_extension(self):
+        assert default_state_file('/etc/mrav2/config.ini').endswith('config.state')
+
+    def test_works_without_extension(self):
+        result = default_state_file('/etc/mrav2/config')
+        assert result.endswith('config.state')
+
+    def test_same_directory_as_config(self):
+        result = default_state_file('/etc/mrav2/config.ini')
+        assert os.path.dirname(result) == os.path.dirname(
+            os.path.abspath('/etc/mrav2/config.ini')
+        )

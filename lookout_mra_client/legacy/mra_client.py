@@ -6,14 +6,14 @@ import logging
 import requests
 from datetime import datetime
 
-from .lookout_logger import LOGGER_NAME
+from ..lookout_logger import LOGGER_NAME
 from .oauth_client import OauthClient, STALE_TOKEN_STATUS_CODES, STALE_TOKEN_ERRORS
-from . import __prj_name__
+from .. import __prj_name__
 
 
 class MRAClient:
     """
-    Class MRAClient to collect events from the Lookout Mobile Rish API.
+    Class MRAClient to collect events from the Lookout Mobile Risk API.
     """
 
     def __init__(
@@ -41,11 +41,6 @@ class MRAClient:
         self.logger = logging.getLogger(LOGGER_NAME)
 
     def get_events(self, limit: int = 100) -> list:
-        """
-        Method to collect events from Mobile Risk API
-        - Requests events (retries if error HTTP code)
-        - Collect events lists from the Mobile Risk API
-        """
         if not self.oauth.access_token:
             self.oauth.get_oauth()
 

@@ -32,17 +32,21 @@ threat_enabled = true
 device_enabled = true
 audit_enabled = false
 
-# Stream position to start from.
-# This is automatically updated as events are processed — do not edit manually
-# unless you need to replay events.  Set to 0 to let start_time control replay.
-stream_position = 0
+# SSE heartbeat timeout in seconds (default: 10).
+# Increase on high-latency links to avoid unnecessary reconnects.
+# sse_timeout = 10
 
 # Start time for event replay (ISO format).
-# Used when stream_position = 0.  If both are unset the connector defaults to
-# 2020-01-01 so that all available history is replayed on first run.
+# Used on the very first run when no state file exists yet.  If unset the
+# connector defaults to 2020-01-01 so that all available history is replayed.
 # NOTE: The Lookout API treats id=0 as "live tail" — start_time is required
 # to replay historical events.
 # start_time = 2024-01-01T00:00:00
+#
+# Stream position is tracked automatically in a state file alongside this
+# config (config.state by default, or override with --state-file on the CLI).
+# Do NOT add a stream_position key here — it is no longer read from config.ini.
+# To force a full replay, delete the .state file and restart the connector.
 
 [syslog]
 # Syslog server hostname or IP

@@ -4,10 +4,10 @@ from typing import Tuple
 from datetime import datetime
 from types import ModuleType
 
-from .models.configuration import Configuration, format_proxy, event_type_display
-from .lookout_logger import init_lookout_logger
-from .event_forwarders.qradar_event_forwarder import QRadarEventForwarder
-from .mra_v2_stream_thread import MRAv2StreamThread
+from ..models.configuration import Configuration, format_proxy, event_type_display
+from ..lookout_logger import init_lookout_logger
+from ..event_forwarders.qradar_event_forwarder import QRadarEventForwarder
+from ..mra_v2_stream_thread import MRAv2StreamThread
 
 
 MAX_BACKOFF_SEC = 600
@@ -18,10 +18,10 @@ class MRAEventRunnerV2:
     """
     MRA Event Runner V2
 
-    Background service that looks for a mra configuration, pulls
-    events from the MRA and outputs them to syslog.
+    Background service that looks for a mra configuration in the database,
+    pulls events from the MRA v2 SSE stream and outputs them to syslog.
 
-    This is used for QRadar event_runner_v2.
+    Used for DB-based deployments (not the standalone config.ini flow).
     """
 
     def __init__(
@@ -47,16 +47,9 @@ class MRAEventRunnerV2:
         self.mra_v2 = None
 
     def __save_config(self, events: list):
-        """
-        Callback to update the configuration with the latest stream position
-        and fetch count.
-
-        The event forwarder will call this function after every batch of events.
-        """
         if len(events) > 0:
             self.logger.info(f"Wrote {len(events)} events to syslog")
 
-            # Save current stream position to avoid repeating events.
             if self.mra_v2.stream.last_event_id != self.configuration.stream_position:
                 self.configuration.stream_position = self.mra_v2.stream.last_event_id
                 self.configuration.fetch_count += len(events)
@@ -64,7 +57,6 @@ class MRAEventRunnerV2:
             self.logger.info("No new events...")
 
         self.configuration.fetched_at = datetime.now()
-        # Only update the event runner specific fields to avoid stepping on new configuration updates from the UI
         self.configuration.save(
             only=[
                 Configuration.stream_position,
@@ -74,7 +66,6 @@ class MRAEventRunnerV2:
         )
 
     def __restart_mra(self):
-        # Stop the current MRA thread and wait for it to finish
         if self.mra_v2:
             self.mra_v2.shutdown_flag.set()
             self.mra_v2.join()
@@ -86,7 +77,6 @@ class MRAEventRunnerV2:
             "proxies": format_proxy(self.configuration),
         }
 
-        # The initial config won't have a stream_position. Instead, it'll set start_time to today
         stream_position = self.configuration.stream_position
         if stream_position:
             stream_args["last_event_id"] = stream_position

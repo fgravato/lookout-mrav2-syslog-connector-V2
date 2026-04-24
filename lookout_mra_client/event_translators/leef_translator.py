@@ -2,7 +2,8 @@
 Module containing attribute mapping for MRA events in LEEF format.
 LEEF format follows the below pattern:
 
-<timestamp> <logId> LEEF:<version>|<vendor>|<product>|<version>|<eventId>|<attribute1>=<value1><fieldSep><attribute2>=<value2>...
+<timestamp> <logId> LEEF:<version>|<vendor>|<product>|<version>|<eventId>|
+<attribute1>=<value1><fieldSep><attribute2>=<value2>...
 
 We use the following values while building the LEEF header:
 - logId: Defined against 'LOG_SOURCE_IDENTIFIER' in config.json
@@ -59,7 +60,7 @@ class LeefTranslator:
                 security_status = device_status["security_status"]
 
                 event_cat = activation_status + "_" + security_status
-                cat_mapping = (
+                cat_mapping = (  # type: ignore[assignment]
                     (
                         "device.status.activation_status",
                         "device.status.security_status",
@@ -114,7 +115,7 @@ class LeefTranslator:
 
                 if "activationStatus" in updated_details:
                     event_cat = activation_status + "_" + security_status
-                    cat_mapping = (
+                    cat_mapping = (  # type: ignore[assignment]
                         (
                             "details.activationStatus",
                             "details.securityStatus",

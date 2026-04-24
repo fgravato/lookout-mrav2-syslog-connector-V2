@@ -42,8 +42,8 @@ class TestEventForwarder:
         class _Forwarder(EventForwarder):
             def __init__(self):
                 self.calls = []
-            def write(self, event, entName):
-                self.calls.append((event, entName))
+            def write(self, event, ent_name):
+                self.calls.append((event, ent_name))
 
         fwd = _Forwarder()
         events = [{"id": 1}, {"id": 2}, {"id": 3}]

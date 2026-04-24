@@ -1,4 +1,3 @@
-import copy
 import socket
 import time
 
@@ -39,11 +38,11 @@ class QRadarEventForwarder(EventForwarder):
         """Close the existing client and open a fresh connection."""
         try:
             self._syslog_client.close()
-        except Exception:
+        except OSError:
             pass
         self._syslog_client = self._create_client()
 
-    def write_all(self, events: list, entName: str):
+    def write_all(self, events: list, ent_name: str):
         """
         Write a MRA v2 event to QRadar
 
@@ -64,21 +63,19 @@ class QRadarEventForwarder(EventForwarder):
         def flatten_events():
             """Flatten SMISHING_ALERT events with multiple detections into individual events."""
             for event in events:
-                # Handle SMISHING_ALERT events with multiple detections
                 if event.get("type") == "SMISHING_ALERT":
-                    detections = event.get("smishing_alert", {}).get("detections", [])
+                    smishing = event.get("smishing_alert", {})
+                    detections = smishing.get("detections", [])
                     if detections:
                         for detection in detections:
-                            # Create a deep copy of the event
-                            new_event = copy.deepcopy(event)
-                            # Remove the 'detections' key
-                            if "smishing_alert" in new_event and "detections" in new_event["smishing_alert"]:
-                                del new_event["smishing_alert"]["detections"]
-                            # Add the individual detection to the event
-                            new_event["smishing_alert"]["detection"] = detection
-                            yield new_event
+                            # Targeted copy: only allocate two new dicts instead of
+                            # recursively deep-copying the entire event.  We copy
+                            # smishing_alert without the detections list and inject
+                            # the single detection, then build a new top-level dict.
+                            new_smishing = {k: v for k, v in smishing.items() if k != "detections"}
+                            new_smishing["detection"] = detection
+                            yield {**event, "smishing_alert": new_smishing}
                     else:
-                        # No detections, yield the original event
                         yield event
                 else:
                     yield event
@@ -87,7 +84,7 @@ class QRadarEventForwarder(EventForwarder):
 
         for event in flattened_events:
             # set defaults if not present
-            event["entName"] = entName
+            event["entName"] = ent_name
             event["details"] = event.get("details", {})
             event["details"]["type"] = event["details"].get("type", "UNKNOWN")
             if self.log_identifier_key:

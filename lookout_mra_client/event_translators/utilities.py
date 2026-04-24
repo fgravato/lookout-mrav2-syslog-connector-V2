@@ -62,7 +62,9 @@ def flatten_event(
             val = format_unicode_string(val, remove_unicode)
 
         if isinstance(val, MutableMapping):
-            flat_event.update(flatten_event(val, use_match_limit, remove_unicode, new_key, sep))
+            flat_event.update(
+                flatten_event(val, use_match_limit, remove_unicode, new_key, sep)  # type: ignore[arg-type]
+            )
         elif isinstance(val, list) and all(isinstance(i, (float, int, bool, str)) for i in val):
             flat_event[new_key] = ",".join(val)
         else:
@@ -119,7 +121,7 @@ def format_unicode_dict(input_dict: dict, remove_unicode: bool) -> dict:
                 val, remove_unicode
             )
         else:
-            new_dict[format_unicode_string(key, remove_unicode)] = format_unicode_string(
+            new_dict[format_unicode_string(key, remove_unicode)] = format_unicode_string(  # type: ignore[assignment]
                 val, remove_unicode
             )
     return new_dict
@@ -154,7 +156,7 @@ def transform_event(mappings: tuple, raw_event: dict) -> dict:
         if extract_lambda is None:
             raise ValueError(f"Unsupported mapping for field: {field_name}")
         if field_name in flat_event:
-            newKey, val = extract_lambda(flat_event, *mapping)
+            newKey, val = extract_lambda(flat_event, *mapping)  # type: ignore[operator]
             transformed_event[newKey] = val
     return transformed_event
 

@@ -2,6 +2,7 @@ import logging
 import socket
 import threading
 from logging.handlers import SysLogHandler
+from typing import Callable
 
 from .lookout_logger import LOGGER_NAME
 
@@ -60,7 +61,7 @@ class SyslogClient(object):
     def __init__(
         self,
         name: str,
-        event_formatter: callable,
+        event_formatter: Callable,
         syslog_address: tuple = ("localhost", 514),
         log_internally: bool = False,
         socktype=socket.SOCK_STREAM,
@@ -92,13 +93,13 @@ class SyslogClient(object):
                 for h in list(self.syslog_logger.handlers):
                     try:
                         h.close()
-                    except Exception:
+                    except OSError:
                         pass
                     self.syslog_logger.removeHandler(h)
                 self.syslog_logger.addHandler(handler)
             self.internal_logger.info(f"SyslogClient connected to {self.syslog_address}")
             return True
-        except Exception as e:
+        except OSError as e:
             self.internal_logger.error(
                 f"SyslogClient failed to connect to {self.syslog_address}: {e}"
             )
@@ -134,6 +135,6 @@ class SyslogClient(object):
             for handler in list(self.syslog_logger.handlers):
                 try:
                     handler.close()
-                except Exception:
+                except OSError:
                     pass
                 self.syslog_logger.removeHandler(handler)

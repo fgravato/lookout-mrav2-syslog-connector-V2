@@ -1,7 +1,7 @@
 import logging
+from typing import Generator, Optional
 
 import requests
-from typing import Generator
 
 from requests_oauthlib import OAuth2Session
 
@@ -15,10 +15,10 @@ SSE_DEFAULT_TIMEOUT = 5  # seconds
 
 def streamRequest(
     url: str,
-    session: OAuth2Session = None,
-    headers: dict = {},
-    params: dict = {},
-    proxies: dict = {},
+    session: Optional[OAuth2Session] = None,
+    headers: Optional[dict] = None,
+    params: Optional[dict] = None,
+    proxies: Optional[dict] = None,
     timeout: int = SSE_DEFAULT_TIMEOUT,
     user_agent: str = "SSEClient",
 ) -> requests.Response:
@@ -36,6 +36,8 @@ def streamRequest(
         requests.Response: Streaming request connecting to MRAv2
     """
 
+    if headers is None:
+        headers = {}
     headers["Accept"] = "text/event-stream"
     headers["Cache-Control"] = "no-cache"
     headers["User-Agent"] = user_agent
@@ -86,8 +88,8 @@ class SSEClient:
         """
         for raw_event in self.__read():
             event = SSEvent()
-            for line in raw_event.splitlines():
-                line = line.decode(self.event_enc)
+            for raw_line in raw_event.splitlines():
+                line = raw_line.decode(self.event_enc)
                 # NOTE: Spec states:
                 #   If the line is empty (a blank line), Dispatch the event, as defined below.
                 #   If the line starts with a U+003A COLON character (:), Ignore the line.

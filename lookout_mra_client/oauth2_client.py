@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 import requests
 from oauthlib.oauth2 import BackendApplicationClient
@@ -21,7 +22,7 @@ class BearerAuth(requests.auth.AuthBase):
     def __init__(self, token: str) -> None:
         self.token = token
 
-    def __call__(self, r: requests.Request) -> requests.Request:
+    def __call__(self, r: requests.PreparedRequest) -> requests.PreparedRequest:
         r.headers["Authorization"] = f"Bearer {self.token}"
         return r
 
@@ -31,7 +32,7 @@ class OAuth2Client:
     Class OAuth2Client to authenticate with Lookout using OAuth2
     """
 
-    def __init__(self, client_id: str, api_domain: str, api_key: str, proxies: dict = None) -> None:
+    def __init__(self, client_id: str, api_domain: str, api_key: str, proxies: Optional[dict] = None) -> None:
         self.client_id = client_id
         self.api_domain = api_domain
         self.api_key = api_key

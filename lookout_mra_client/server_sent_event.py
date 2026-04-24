@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 
 VALID_FIELDS = ["id", "event", "data", "retry"]
 
@@ -8,7 +9,7 @@ class SSEvent:
     Using an event class allows for checking event fields.
     """
 
-    def __init__(self, id: int = None, event: str = "", data: str = "", retry: int = None):
+    def __init__(self, id: Optional[str] = None, event: str = "", data: str = "", retry: Optional[int] = None):
         self.id = id
         self.event = event
         self.data = data

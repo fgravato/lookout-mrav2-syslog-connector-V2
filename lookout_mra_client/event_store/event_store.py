@@ -10,7 +10,7 @@ class EventStore:
         self.__event_count = 0
         self.__event_threshold = self.DEFAULT_EVENT_THRESHOLD
 
-    def received_event(self, id: int):
+    def received_event(self, id: str):
         self.__event_count += 1
         if self.__event_count >= self.__event_threshold:
             self.save(id)

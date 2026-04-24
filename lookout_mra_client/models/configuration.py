@@ -1,3 +1,4 @@
+# flake8: noqa: E401,F401,F403,F405
 import ast, logging
 from datetime import datetime
 from types import ModuleType

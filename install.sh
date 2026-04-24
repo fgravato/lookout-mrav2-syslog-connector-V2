@@ -65,15 +65,10 @@ echo "Upgrading pip..."
 pip install --upgrade pip
 echo ""
 
-# Install dependencies
+# Install dependencies from pinned requirements file
 echo "Installing dependencies..."
-pip install requests>=2.25.0 \
-    requests-oauthlib>=1.3.0 \
-    oauthlib>=3.1.0 \
-    backoff>=1.10.0 \
-    peewee>=3.14.0 \
-    furl>=2.1.0 \
-    importlib-metadata>=4.0.0
+pip install -r "${INSTALL_DIR}/requirements.txt"
+pip install -e "${INSTALL_DIR}"
 
 echo ""
 echo "Dependencies installed successfully"
@@ -83,10 +78,13 @@ echo ""
 if [ ! -f "${INSTALL_DIR}/config.ini" ]; then
     echo "Creating default configuration file..."
     cp "${INSTALL_DIR}/config.ini.example" "${INSTALL_DIR}/config.ini"
+    chmod 600 "${INSTALL_DIR}/config.ini"
     echo "Configuration file created: ${INSTALL_DIR}/config.ini"
     echo "Please edit this file with your Lookout API credentials"
 else
     echo "Configuration file already exists: ${INSTALL_DIR}/config.ini"
+    # Tighten permissions in case they were set loosely before
+    chmod 600 "${INSTALL_DIR}/config.ini"
 fi
 
 echo ""

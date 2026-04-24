@@ -1,6 +1,7 @@
 import json
 import socket
 import time
+from typing import Optional
 
 from .event_forwarder import EventForwarder
 from ..syslog_client import SyslogClient
@@ -24,7 +25,7 @@ class SplunkEventForwarder(EventForwarder):
         self.callback = callback
         self.socktype = socket.SOCK_DGRAM if use_udp else socket.SOCK_STREAM
         self._syslog_client = self._create_client()
-        self._last_write_time = None
+        self._last_write_time: Optional[float] = None
 
     def _create_client(self) -> SyslogClient:
         return SyslogClient(
@@ -39,27 +40,20 @@ class SplunkEventForwarder(EventForwarder):
         """Close the existing client and open a fresh connection."""
         try:
             self._syslog_client.close()
-        except Exception:
+        except OSError:
             pass
         self._syslog_client = self._create_client()
 
-    def write_all(self, events: list, entName: str = "") -> None:
+    def write_all(self, events: list, ent_name: str = "") -> None:
         now = time.time()
         if self._last_write_time is not None and (now - self._last_write_time) > _RECONNECT_IDLE_SECONDS:
             self._reconnect()
-        super().write_all(events, entName)
+        super().write_all(events, ent_name)
         self._last_write_time = time.time()
         if self.callback:
             self.callback(events)
 
-    def write(self, event: dict, entName: str = "") -> None:
-        """
-        Annotate and forward one MRAv2 event as a JSON syslog message.
-
-        Args:
-            event (dict): MRAv2 event dict.
-            entName (str): Enterprise name injected into the payload.
-        """
-        event["entName"] = entName
+    def write(self, event: dict, ent_name: str = "") -> None:
+        event["entName"] = ent_name
         event["type"] = event.get("type", "UNKNOWN")
         self._syslog_client.write(event)

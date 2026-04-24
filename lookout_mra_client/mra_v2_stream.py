@@ -2,7 +2,7 @@ import logging
 
 import backoff
 from datetime import datetime
-from typing import Generator, Tuple
+from typing import Generator, Optional, Tuple
 from oauthlib.oauth2 import TokenExpiredError
 
 from .lookout_logger import LOGGER_NAME
@@ -11,10 +11,10 @@ from .sse_client import SSEClient, SSEvent, streamRequest
 from . import __prj_name__
 
 MRA_V2_STREAM_ROUTE = "/mra/stream/v2/events"
-# MRA v2 sends a heartbeat at least every 5 seconds when no events to stream.
-#   If no events seen in 5 seconds, close the connection and reconnect.
-# NOTE: Set this to 10 seconds for now to avoid reconnecting if MRA v2 happens to be slow.
-TIMEOUT = 10  # seconds
+# Default heartbeat timeout.  The API sends a heartbeat at least every 5 s;
+# 10 s gives a comfortable margin before declaring the connection dead.
+# Configurable via sse_timeout in [lookout] config section or --state-file CLI.
+_DEFAULT_SSE_TIMEOUT = 10  # seconds
 YIELD_EVENTS = ["events", "heartbeat"]
 RECONNECT_EVENTS = ["end", "reconnect"]
 
@@ -33,16 +33,18 @@ class MRAv2Stream:
         api_domain: str,
         api_key: str,
         last_event_id: str = "0",
-        start_time: datetime = None,
+        start_time: Optional[datetime] = None,
         event_type: str = "THREAT,DEVICE",
-        proxies: dict = None,
-        user_agent: str = None,
+        proxies: Optional[dict] = None,
+        user_agent: Optional[str] = None,
+        timeout: int = _DEFAULT_SSE_TIMEOUT,
     ) -> None:
         self.last_event_id = last_event_id
         self.start_time = start_time
         self.event_type = event_type
         self.proxies = proxies
-        self.retry_ms = None
+        self.timeout = timeout
+        self.retry_ms: Optional[int] = None
         if user_agent is None:
             self.user_agent = f"{__prj_name__}"
         else:
@@ -52,7 +54,7 @@ class MRAv2Stream:
 
         self.logger = logging.getLogger(LOGGER_NAME)
         self.oauth_client = OAuth2Client("MRAv2", api_domain, api_key, proxies)
-        self.mra_v2_client: SSEClient = None
+        self.mra_v2_client: Optional[SSEClient] = None
 
     @backoff.on_exception(backoff.expo, Exception, max_tries=5, jitter=None, logger=LOGGER_NAME)
     def __init_stream(self) -> None:
@@ -73,7 +75,7 @@ class MRAv2Stream:
             session=self.oauth_client.session,
             params=params,
             proxies=self.proxies,
-            timeout=TIMEOUT,
+            timeout=self.timeout,
             user_agent=self.user_agent,
         )
         if mra_stream.status_code != 200:
@@ -101,7 +103,7 @@ class MRAv2Stream:
             session=self.oauth_client.session,
             params=params,
             proxies=self.proxies,
-            timeout=TIMEOUT,
+            timeout=self.timeout,
             user_agent=self.user_agent,
         )
         if mra_stream.status_code != 200:
@@ -122,6 +124,7 @@ class MRAv2Stream:
             SSEvent: Either a group of MRA v2 events, or a heartbeat.
         """
         self.__init_stream()
+        assert self.mra_v2_client is not None
 
         while True:
             try:
@@ -143,19 +146,19 @@ class MRAv2Stream:
             except ShutdownException:
                 break
             except Exception:
-                self.logger.exception(f"Error fetching events from stream")
+                self.logger.exception("Error fetching events from stream")
 
                 # Restart the stream connection
                 try:
                     self.__restart_stream()
                     continue
                 except Exception:
-                    self.logger.exception(f"Failed to restart stream. Exiting stream listener.")
+                    self.logger.exception("Failed to restart stream. Exiting stream listener.")
                     break
 
         self.shutdown()
 
-    def shutdown(self) -> Tuple[int, int]:
+    def shutdown(self) -> Tuple[str, Optional[int]]:
         """
         Report last seen event id and close SSE connection.
 

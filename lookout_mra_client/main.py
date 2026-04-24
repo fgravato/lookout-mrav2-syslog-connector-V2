@@ -14,10 +14,10 @@ import sys
 import threading
 import time
 from datetime import datetime
-from typing import Tuple
 
 from .lookout_logger import init_lookout_logger
 from .mra_v2_stream_thread import MRAv2StreamThread
+from .stream_position_file import StreamPositionFile
 from .event_forwarders.qradar_event_forwarder import QRadarEventForwarder
 from .event_forwarders.splunk_event_forwarder import SplunkEventForwarder
 from .event_forwarders.event_forwarder import EventForwarder
@@ -31,11 +31,26 @@ ConfigType = configparser.ConfigParser
 _SAVE_INTERVAL_SECONDS = 30  # how often to persist stream_position during normal operation
 
 
-def save_stream_position(config: ConfigType, config_file: str, position: int) -> None:
-    """Write stream_position back to config.ini so restarts resume from here."""
-    config.set("lookout", "stream_position", str(position))
-    with open(config_file, "w") as fh:
-        config.write(fh)
+def _warn_if_config_world_readable(config_file: str, logger: logging.Logger) -> None:
+    """Warn if the config file is readable by users other than the owner."""
+    try:
+        mode = os.stat(config_file).st_mode
+        if mode & 0o044:  # group-readable or world-readable
+            logger.warning(
+                f"Config file {config_file} may be readable by other users. "
+                f"It contains API credentials — tighten permissions: chmod 600 {config_file}"
+            )
+    except OSError:
+        pass
+
+
+def default_state_file(config_file: str) -> str:
+    """Derive the default state file path from the config file path.
+
+    Example: /etc/mrav2/config.ini -> /etc/mrav2/config.state
+    """
+    base = os.path.splitext(os.path.abspath(config_file))[0]
+    return base + ".state"
 
 
 def signal_handler(sig, frame):
@@ -55,6 +70,12 @@ def parse_args():
         "--config",
         required=True,
         help="Path to configuration INI file",
+    )
+    parser.add_argument(
+        "-s",
+        "--state-file",
+        default=None,
+        help="Path to stream position state file (default: <config>.state)",
     )
     parser.add_argument(
         "-l",
@@ -90,7 +111,7 @@ def load_config(config_file: str) -> configparser.ConfigParser:
 def parse_event_types(config: ConfigType) -> str:
     """Parse enabled event types from config"""
     event_types = []
-    
+
     if config.getboolean("lookout", "threat_enabled", fallback=True):
         event_types.append("THREAT")
     if config.getboolean("lookout", "device_enabled", fallback=True):
@@ -135,8 +156,10 @@ def create_event_forwarder(
     """Create appropriate event forwarder based on config"""
     syslog_host = config.get("syslog", "host", fallback="localhost")
     syslog_port = config.getint("syslog", "port", fallback=514)
+    if not 1 <= syslog_port <= 65535:
+        raise ValueError(f"syslog port must be 1–65535, got {syslog_port}")
     forwarder_type = config.get("syslog", "forwarder_type", fallback="qradar").lower()
-    
+
     log_identifier_key = config.get("syslog", "log_identifier_key", fallback="")
     log_identifier = config.get("syslog", "log_identifier", fallback="")
     use_udp = config.getboolean("syslog", "use_udp", fallback=False)
@@ -182,18 +205,24 @@ def main():
         logger.info(f"Loaded configuration from {args.config}")
 
         # Parse configuration
+        _warn_if_config_world_readable(args.config, logger)
+
         entity_name = config.get("lookout", "entity_name")
         api_domain = config.get("lookout", "api_domain")
         api_key = config.get("lookout", "api_key")
         event_types = parse_event_types(config)
         proxies = parse_proxy(config)
-        
-        stream_position = config.get("lookout", "stream_position", fallback="0")
         start_time_str = config.get("lookout", "start_time", fallback="")
+        sse_timeout = config.getint("lookout", "sse_timeout", fallback=10)
 
         logger.info(f"Entity: {entity_name}")
         logger.info(f"API Domain: {api_domain}")
         logger.info(f"Event Types: {event_types}")
+
+        # Resolve stream position state file
+        state_file_path = args.state_file or default_state_file(args.config)
+        pos_file = StreamPositionFile(state_file_path)
+        logger.info(f"Stream position state file: {state_file_path}")
 
         # Create event forwarder
         event_forwarder = create_event_forwarder(config, logger)
@@ -204,26 +233,44 @@ def main():
             "api_key": api_key,
             "event_type": event_types,
             "proxies": proxies,
+            "timeout": sse_timeout,
         }
 
-        # Set stream position or start time.
+        # Resolve starting position.
+        #
+        # Priority:
+        #   1. State file  — written at runtime; survives restarts without touching config.ini
+        #   2. config.ini stream_position  — one-time migration for existing deployments
+        #   3. config.ini start_time  — ISO timestamp configured by the operator
+        #   4. Built-in default  — replay all available history (2020-01-01)
+        #
         # NOTE: The Lookout API treats id=0 as "start from current position"
-        # (live tail), not "replay from the beginning of history".  When no
-        # explicit position or start_time is configured we therefore default
-        # to a far-back start_time so that all available events are replayed
-        # on first run.  Once events are processed the stream position is
-        # persisted and subsequent restarts resume from where they left off.
-        if stream_position and stream_position != "0":
+        # (live tail).  A start_time is required to replay historical events.
+        stream_position = pos_file.read()
+        if stream_position:
             stream_args["last_event_id"] = stream_position
-            logger.info(f"Starting from stream position: {stream_position}")
-        elif start_time_str:
-            start_time = datetime.fromisoformat(start_time_str)
-            stream_args["start_time"] = start_time
-            logger.info(f"Starting from time: {start_time}")
+            logger.info(f"Resuming from stream position: {stream_position} (state file)")
         else:
-            default_start = datetime(2020, 1, 1)
-            stream_args["start_time"] = default_start
-            logger.info(f"No position or start_time configured — replaying from {default_start.date()} (all available history)")
+            # Migration: honour a position written to config.ini by an older version
+            legacy_position = config.get("lookout", "stream_position", fallback="0")
+            if legacy_position and legacy_position != "0":
+                stream_args["last_event_id"] = legacy_position
+                logger.info(
+                    f"Resuming from stream position: {legacy_position} (migrated from config.ini)"
+                )
+                # Persist to the state file so future restarts don't touch config.ini
+                pos_file.write(legacy_position, entity_name)
+            elif start_time_str:
+                start_time = datetime.fromisoformat(start_time_str)
+                stream_args["start_time"] = start_time
+                logger.info(f"Starting from time: {start_time}")
+            else:
+                default_start = datetime(2020, 1, 1)
+                stream_args["start_time"] = default_start
+                logger.warning(
+                    f"No position or start_time configured — replaying ALL history "
+                    f"from {default_start.date()}. Set start_time in config to limit replay."
+                )
 
         # Create and start MRA stream thread
         mra_thread = MRAv2StreamThread(entity_name, event_forwarder, **stream_args)
@@ -233,9 +280,8 @@ def main():
         logger.info("Press Ctrl+C to stop")
 
         # Wait for shutdown signal, periodically persisting the stream position
-        # so that a clean restart resumes from where we left off instead of
-        # replaying from the beginning.
-        last_saved_position = "0"
+        # so that a clean restart resumes from where we left off.
+        last_saved_position = ""
         last_save_time = time.time()
         while not shutdown_event.is_set():
             threading.Event().wait(1)
@@ -243,7 +289,7 @@ def main():
             if now - last_save_time >= _SAVE_INTERVAL_SECONDS:
                 current_position = mra_thread.stream.last_event_id
                 if current_position and current_position != last_saved_position:
-                    save_stream_position(config, args.config, current_position)
+                    pos_file.write(current_position, entity_name)
                     logger.debug(f"Stream position {current_position} saved")
                     last_saved_position = current_position
                 last_save_time = now
@@ -254,10 +300,10 @@ def main():
         if mra_thread.is_alive():
             mra_thread.join(timeout=10)
 
-        # Final position save so the next restart resumes exactly where we stopped
+        # Final save so the next restart resumes exactly where we stopped
         final_position = mra_thread.stream.last_event_id
         if final_position and final_position != last_saved_position:
-            save_stream_position(config, args.config, final_position)
+            pos_file.write(final_position, entity_name)
             logger.info(f"Stream position {final_position} saved on shutdown")
 
         logger.info("MRAv2 Syslog Connector stopped")
